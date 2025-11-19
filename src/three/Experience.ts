@@ -5,7 +5,7 @@ import { CharacterController } from './CharacterController';
 import { ScrollController } from './ScrollController';
 import { UiController, UiSceneConfig } from './UiController';
 
-type SceneId = 'intro' | 'lifStreet';
+type SceneId = 'intro' | 'lifStreet' | 'yilSonu' | 'gidis';
 
 interface SceneDefinition {
   id: SceneId;
@@ -38,7 +38,32 @@ const SCENES: SceneDefinition[] = [
         'Scroll ile ilerledikçe tüm satırlar tamamlanacak.',
         'Bu metinleri de ileride gerçek hikaye / açıklama ile değiştireceksin.'
       ],
-      // Bu sahneden sonra ek sahneler geldiğinde burayı da güncelleyeceğiz.
+      nextSceneTitle: 'Sonraki sahne: Yıl Sonu'
+    }
+  },
+  {
+    id: 'yilSonu',
+    ui: {
+      title: 'Yıl Sonu',
+      texts: [
+        'Yeni bir yılın eşiği...',
+        'Geride kalanların değerlendirilmesi...',
+        'Dönüşümün başlangıcı...',
+        'Yol devam ediyor...'
+      ],
+      nextSceneTitle: 'Sonraki sahne: Gidiş'
+    }
+  },
+  {
+    id: 'gidis',
+    ui: {
+      title: 'Gidiş',
+      texts: [
+        'Yolun sonuna yaklaşırken...',
+        'Işık artık zayıf...',
+        'Sessizlik ağırlaşıyor...',
+        'Ama adımlar devam ediyor...'
+      ],
       nextSceneTitle: undefined
     }
   }
@@ -71,6 +96,29 @@ export class Experience {
   private lifSun: THREE.Object3D | null = null;
   private lifSunLight: THREE.DirectionalLight | null = null;
   private lifSunPointLight: THREE.PointLight | null = null; // Extra light from the sun
+
+  // Yıl Sonu specific objects
+  private yilSonuIsland: THREE.Object3D | null = null;
+  private islandLoader: GLTFLoader = new GLTFLoader();
+
+  // Gidiş specific objects (dim/dying sun)
+  private gidisSun: THREE.Object3D | null = null;
+  private gidisSunLight: THREE.DirectionalLight | null = null;
+  private gidisLoader: GLTFLoader = new GLTFLoader();
+
+  // Gidiş atmosphere effects
+  private gidisAmbientLight: THREE.AmbientLight | null = null;
+
+  // Rain system for gidis
+  private gidisRainGeometry: THREE.BufferGeometry | null = null;
+  private gidisRainMaterial: THREE.PointsMaterial | null = null;
+  private gidisRainPoints: THREE.Points | null = null;
+
+  // Lightning system for gidis
+  private gidisLightningLight: THREE.DirectionalLight | null = null;
+  private gidisLightningTimer: number = 0;
+  private gidisLightningCooldown: number = 0;
+  private gidisLightningDuration: number = 0.15; // total flash duration in seconds
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -166,6 +214,13 @@ export class Experience {
     const delta = this.clock.getDelta();
 
     this.characterController.update(delta);
+
+    // Per-scene effect updates
+    const sceneDef = SCENES[this.currentSceneIndex];
+    if (sceneDef.id === 'gidis') {
+      this.updateGidisEffects(delta);
+    }
+
     this.updateCameraFollow();
 
     this.renderer.render(this.scene, this.cameraController.getCamera());
@@ -327,6 +382,305 @@ export class Experience {
   }
 
   /**
+   * Setup Yıl Sonu environment (island model)
+   */
+  private async setupYilSonuEnvironment(): Promise<void> {
+    if (this.yilSonuIsland) return;
+
+    try {
+      console.log('Loading Yıl Sonu environment...');
+      
+      const gltf = await this.islandLoader.loadAsync('/models/yilsonu/island.glb');
+
+      this.yilSonuIsland = gltf.scene;
+      this.yilSonuIsland.traverse((child) => {
+        if ((child as THREE.Mesh).isMesh) {
+          const mesh = child as THREE.Mesh;
+          mesh.castShadow = true;
+          mesh.receiveShadow = true;
+        }
+      });
+
+      // Position island on the left side of the walking path
+      this.yilSonuIsland.position.set(-5, -1, -12);
+      this.yilSonuIsland.scale.set(1.6, 1.6, 1.6);
+
+      this.scene.add(this.yilSonuIsland);
+      console.log('✓ Yıl Sonu island loaded and positioned');
+      
+    } catch (err) {
+      console.error('Failed to load YılSonu island:', err);
+    }
+  }
+
+  /**
+   * Cleanup Yıl Sonu environment
+   */
+  private cleanupYilSonuEnvironment(): void {
+    if (this.yilSonuIsland) {
+      this.scene.remove(this.yilSonuIsland);
+      this.yilSonuIsland = null;
+      console.log('✓ Yıl Sonu island removed');
+    }
+  }
+
+  /**
+   * Setup Gidiş environment (dim/dying sun, rain, lightning)
+   */
+  private async setupGidisEnvironment(): Promise<void> {
+    // Avoid re-creating if already active
+    if (this.gidisSun && this.gidisRainPoints && this.gidisLightningLight) {
+      return;
+    }
+
+    try {
+      console.log('Loading Gidiş environment...');
+      
+      // 1) Load dim sun (reuse the same sun.glb but with minimal lighting)
+      if (!this.gidisSun) {
+        const gltf = await this.gidisLoader.loadAsync('/models/lif_street/sun.glb');
+        this.gidisSun = gltf.scene;
+
+        this.gidisSun.traverse((child) => {
+          if ((child as THREE.Mesh).isMesh) {
+            const mesh = child as THREE.Mesh;
+            mesh.castShadow = false;
+            mesh.receiveShadow = false;
+
+            // Make the sun barely visible (dying/ghost sun)
+            if (mesh.material) {
+              const material = mesh.material as THREE.MeshStandardMaterial;
+              material.emissive = new THREE.Color(0x000000);
+              material.emissiveIntensity = 0.005; // Almost invisible
+              material.opacity = 0.3; // Semi-transparent
+              material.transparent = true;
+            }
+          }
+        });
+
+        // Position sun on the left side in the very far distance
+        this.gidisSun.position.set(-6, 3.5, -25);
+        this.gidisSun.scale.set(1.0, 1.0, 1.0);
+
+        this.scene.add(this.gidisSun);
+        console.log('✓ Dim sun loaded and positioned (left side)');
+      }
+
+      // 2) Add extremely faint directional light (ghost light)
+      if (!this.gidisSunLight) {
+        this.gidisSunLight = new THREE.DirectionalLight(0xffdcb0, 0.08); // Even weaker
+        this.gidisSunLight.position.set(-6, 4, -20);
+
+        const target = new THREE.Object3D();
+        target.position.set(0, 0, -10);
+        this.scene.add(target);
+
+        this.gidisSunLight.target = target;
+        this.scene.add(this.gidisSunLight);
+        console.log('✓ Faint directional light created (dying sun)');
+      }
+
+      // 3) Add a dark ambient light to make the scene overall dim
+      if (!this.gidisAmbientLight) {
+        this.gidisAmbientLight = new THREE.AmbientLight(0x202430, 0.18);
+        this.scene.add(this.gidisAmbientLight);
+        
+        // Set darker scene background
+        this.scene.background = new THREE.Color(0x151820);
+        
+        console.log('✓ Dark ambient light added');
+      }
+
+      // 4) Create rain particles above the path
+      if (!this.gidisRainPoints) {
+        const rainCount = 1800;
+        const positions = new Float32Array(rainCount * 3);
+
+        // Distribute rain roughly above the walking area
+        for (let i = 0; i < rainCount; i++) {
+          const i3 = i * 3;
+          positions[i3 + 0] = (Math.random() - 0.5) * 10;  // x: -5..5
+          positions[i3 + 1] = 3 + Math.random() * 8;       // y: 3..11
+          positions[i3 + 2] = -25 + Math.random() * 30;    // z: -25..5
+        }
+
+        this.gidisRainGeometry = new THREE.BufferGeometry();
+        this.gidisRainGeometry.setAttribute(
+          'position',
+          new THREE.BufferAttribute(positions, 3)
+        );
+
+        this.gidisRainMaterial = new THREE.PointsMaterial({
+          color: 0x88a0ff,
+          size: 0.06,
+          transparent: true,
+          opacity: 0.8,
+          depthWrite: false
+        });
+
+        this.gidisRainPoints = new THREE.Points(
+          this.gidisRainGeometry,
+          this.gidisRainMaterial
+        );
+        this.scene.add(this.gidisRainPoints);
+        console.log('✓ Rain particles created (1800 drops)');
+      }
+
+      // 5) Create a lightning light for brief flashes
+      if (!this.gidisLightningLight) {
+        this.gidisLightningLight = new THREE.DirectionalLight(0xffffff, 0);
+        // Place lightning somewhere above and in front of the scene
+        this.gidisLightningLight.position.set(-5, 10, -15);
+
+        const lightningTarget = new THREE.Object3D();
+        lightningTarget.position.set(0, 0, -10);
+        this.scene.add(lightningTarget);
+
+        this.gidisLightningLight.target = lightningTarget;
+        this.scene.add(this.gidisLightningLight);
+
+        // Reset timers
+        this.gidisLightningTimer = 0;
+        this.gidisLightningCooldown = 2 + Math.random() * 4; // 2-6 seconds (more frequent)
+        console.log('✓ Lightning system initialized');
+      }
+
+      console.log('✓ Gidiş environment setup complete (dark, rainy atmosphere)');
+
+    } catch (err) {
+      console.error('Failed to load Gidis sun:', err);
+    }
+  }
+
+  /**
+   * Cleanup Gidiş environment (remove all atmosphere effects)
+   */
+  private cleanupGidisEnvironment(): void {
+    // Remove dim sun
+    if (this.gidisSun) {
+      this.scene.remove(this.gidisSun);
+      this.gidisSun = null;
+      console.log('✓ Dim sun removed');
+    }
+
+    // Remove dim sun directional light and its target
+    if (this.gidisSunLight) {
+      const target = this.gidisSunLight.target;
+      this.scene.remove(this.gidisSunLight);
+      if (target) {
+        this.scene.remove(target);
+      }
+      this.gidisSunLight = null;
+      console.log('✓ Faint directional light removed');
+    }
+
+    // Remove ambient light and reset scene background
+    if (this.gidisAmbientLight) {
+      this.scene.remove(this.gidisAmbientLight);
+      this.gidisAmbientLight = null;
+      
+      // Reset scene background to null (transparent)
+      this.scene.background = null;
+      
+      console.log('✓ Dark ambient light removed');
+    }
+
+    // Remove rain
+    if (this.gidisRainPoints) {
+      this.scene.remove(this.gidisRainPoints);
+      this.gidisRainPoints = null;
+      console.log('✓ Rain particles removed');
+    }
+    if (this.gidisRainGeometry) {
+      this.gidisRainGeometry.dispose();
+      this.gidisRainGeometry = null;
+    }
+    if (this.gidisRainMaterial) {
+      this.gidisRainMaterial.dispose();
+      this.gidisRainMaterial = null;
+    }
+
+    // Remove lightning light and its target
+    if (this.gidisLightningLight) {
+      const target = this.gidisLightningLight.target;
+      this.scene.remove(this.gidisLightningLight);
+      if (target) {
+        this.scene.remove(target);
+      }
+      this.gidisLightningLight = null;
+      console.log('✓ Lightning system removed');
+    }
+
+    // Reset timers
+    this.gidisLightningTimer = 0;
+    this.gidisLightningCooldown = 0;
+  }
+
+  /**
+   * Update Gidiş scene effects (rain fall + lightning flashes)
+   */
+  private updateGidisEffects(delta: number): void {
+    // 1) Rain fall animation
+    if (this.gidisRainGeometry && this.gidisRainPoints) {
+      const attr = this.gidisRainGeometry.getAttribute('position');
+      const positions = attr.array as Float32Array;
+      const count = positions.length / 3;
+      const rainSpeed = 9; // units per second
+
+      for (let i = 0; i < count; i++) {
+        const i3 = i * 3;
+        // y index is i3 + 1
+        positions[i3 + 1] -= rainSpeed * delta;
+
+        // Reset drop to top if it falls below ground
+        if (positions[i3 + 1] < 0) {
+          positions[i3 + 1] = 8 + Math.random() * 4; // 8..12
+          positions[i3 + 0] = (Math.random() - 0.5) * 10; // x
+          positions[i3 + 2] = -25 + Math.random() * 30;   // z
+        }
+      }
+
+      attr.needsUpdate = true;
+    }
+
+    // 2) Lightning timing and flashes
+    if (this.gidisLightningLight) {
+      if (this.gidisLightningTimer > 0) {
+        // Lightning is currently active
+        this.gidisLightningTimer -= delta;
+        const t = Math.max(0, this.gidisLightningTimer / this.gidisLightningDuration);
+        // Quick flicker: intensity fades out non-linearly - POWERFUL flash
+        this.gidisLightningLight.intensity = 6.5 * (t * t);
+
+        if (this.gidisLightningTimer <= 0) {
+          this.gidisLightningLight.intensity = 0;
+        }
+      } else {
+        // Waiting for next lightning
+        this.gidisLightningCooldown -= delta;
+        if (this.gidisLightningCooldown <= 0) {
+          // Trigger a new flash
+          this.gidisLightningDuration = 0.08 + Math.random() * 0.12; // 0.08 - 0.2s
+          this.gidisLightningTimer = this.gidisLightningDuration;
+          const nextCooldown = 2 + Math.random() * 4;
+          this.gidisLightningCooldown = nextCooldown;
+
+          // Place lightning based on camera position for guaranteed visibility
+          const cam = this.cameraController.getCamera();
+          const x = cam.position.x + (Math.random() - 0.5) * 4;   // slight horizontal variation
+          const y = cam.position.y + 6 + Math.random() * 3;       // above the camera
+          const z = cam.position.z - 10 + (Math.random() - 0.5) * 3;  // in front of camera
+
+          this.gidisLightningLight.position.set(x, y, z);
+
+          // Log lightning strike
+          console.log(`⚡ ŞIMŞEK! Position: (${x.toFixed(1)}, ${y.toFixed(1)}, ${z.toFixed(1)}) | Next in ${nextCooldown.toFixed(1)}s`);
+        }
+      }
+    }
+  }
+
+  /**
    * Setup scene-specific environment based on scene ID
    */
   private setupSceneEnvironment(sceneIndex: number): void {
@@ -336,6 +690,12 @@ export class Experience {
       case 'lifStreet':
         // Fire and forget; environment can load async
         this.setupLifStreetEnvironment();
+        break;
+      case 'yilSonu':
+        this.setupYilSonuEnvironment();
+        break;
+      case 'gidis':
+        this.setupGidisEnvironment();
         break;
       case 'intro':
       default:
@@ -353,6 +713,12 @@ export class Experience {
     switch (sceneDef.id) {
       case 'lifStreet':
         this.cleanupLifStreetEnvironment();
+        break;
+      case 'yilSonu':
+        this.cleanupYilSonuEnvironment();
+        break;
+      case 'gidis':
+        this.cleanupGidisEnvironment();
         break;
       case 'intro':
       default:
