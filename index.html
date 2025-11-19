@@ -8,6 +8,21 @@
   <body>
     <canvas id="webgl"></canvas>
     <div id="scroll-content"></div>
+
+    <!-- UI overlay for scenes -->
+    <div id="ui-root">
+      <!-- Right side text panel -->
+      <div id="scene-text-panel"></div>
+
+      <!-- Center popup for "next scene" -->
+      <div id="scene-next-overlay" class="hidden">
+        <div id="scene-next-box">
+          <div id="scene-next-title"></div>
+          <button id="scene-next-button">Devam Et</button>
+        </div>
+      </div>
+    </div>
+
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

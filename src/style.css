@@ -35,3 +35,89 @@ body {
   pointer-events: none;
 }
 
+/* UI root overlays over the 3D canvas */
+#ui-root {
+  position: fixed;
+  inset: 0;
+  pointer-events: none; /* by default, allow canvas interactions */
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  color: #f9f9f9;
+}
+
+/* Right side text panel */
+#scene-text-panel {
+  position: absolute;
+  top: 10%;
+  right: 5%;
+  width: 26%;
+  max-height: 80%;
+  overflow: hidden;
+  pointer-events: none;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+/* Each text line */
+#scene-text-panel p {
+  margin: 0 0 0.6rem 0;
+  opacity: 0.2;
+  transition: opacity 0.25s ease-out, transform 0.25s ease-out;
+  transform: translateY(10px);
+}
+
+#scene-text-panel p.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Center overlay for next scene */
+#scene-next-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none; /* we will enable via .active */
+}
+
+#scene-next-overlay.hidden {
+  display: none;
+}
+
+#scene-next-overlay.active {
+  pointer-events: auto;
+}
+
+#scene-next-box {
+  min-width: 260px;
+  padding: 1.5rem 2rem;
+  border-radius: 12px;
+  background: rgba(5, 5, 15, 0.9);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  text-align: center;
+}
+
+#scene-next-title {
+  font-size: 16px;
+  margin-bottom: 1rem;
+}
+
+#scene-next-button {
+  padding: 0.6rem 1.5rem;
+  border-radius: 999px;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  background: #f97316;
+  color: #0b0b12;
+  transition: transform 0.1s ease-out, box-shadow 0.1s ease-out, background 0.2s;
+}
+
+#scene-next-button:hover {
+  background: #fb923c;
+  box-shadow: 0 8px 20px rgba(249, 115, 22, 0.4);
+  transform: translateY(-1px);
+}
+
