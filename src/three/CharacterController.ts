@@ -19,15 +19,11 @@ export class CharacterController {
 
   // Movement parameters
   private startZ: number = 0;
-  private endZ: number = -30;
+  private endZ: number = -40; // tune this if the path should be longer or shorter
   private currentProgress: number = 0;
   private targetProgress: number = 0;
-  
-  // Movement smoothing
-  private readonly smoothSpeed: number = 2.0; // Units per second when lerping
   private lastZ: number = 0;
-  private currentSpeed: number = 0;
-  
+
   // Animation thresholds
   private readonly idleThreshold: number = 0.01; // Speed below this = idle
 
@@ -35,7 +31,7 @@ export class CharacterController {
   private modelLoaded: boolean = false;
 
   // Model paths
-  private readonly baseModelPath: string = '/models/character_base.glb';
+  private readonly baseModelPath: string = '/models/character.glb';
   private readonly idleAnimPath: string = '/models/character_idle.glb';
   private readonly walkAnimPath: string = '/models/character_walk.glb';
 
@@ -152,9 +148,55 @@ export class CharacterController {
     // Create mixer on the base model
     this.mixer = new THREE.AnimationMixer(this.object3D);
 
-    // Extract idle animation (use first clip from idle file)
+    // Helper to retarget animation clips to match base model's bone names
+    const retargetClip = (clip: THREE.AnimationClip) => {
+      // 1. Collect all bone names from the base model
+      const modelBoneNames: string[] = [];
+      this.object3D.traverse((child) => {
+        if (child instanceof THREE.Bone) {
+          modelBoneNames.push(child.name);
+        }
+      });
+
+      console.log(`Retargeting "${clip.name}". Model has ${modelBoneNames.length} bones.`);
+
+      // 2. Map each track to the correct bone name
+      clip.tracks.forEach((track) => {
+        // Track name format: "BoneName.property" (e.g., "mixamorig:Hips.position")
+        const trackBoneName = track.name.split('.')[0];
+        const property = track.name.split('.').slice(1).join('.');
+
+        // Perfect match?
+        if (modelBoneNames.includes(trackBoneName)) {
+          return; // All good
+        }
+
+        // Try to find a match
+        // Strategy A: Remove prefix from track name and check (Animation has prefix, Model doesn't)
+        const trackNameNoPrefix = trackBoneName.split(':').pop() || trackBoneName;
+        
+        // Strategy B: Find a bone in model that ends with the track name (Model has prefix, Animation doesn't)
+        const match = modelBoneNames.find(
+          (modelName) => 
+            modelName === trackNameNoPrefix || 
+            modelName.endsWith(':' + trackNameNoPrefix) ||
+            trackNameNoPrefix.endsWith(':' + modelName)
+        );
+
+        if (match) {
+          // console.log(`Retargeting: ${trackBoneName} -> ${match}`);
+          track.name = `${match}.${property}`;
+        } else {
+          // console.warn(`Could not find matching bone for track: ${trackBoneName}`);
+        }
+      });
+      
+      return clip;
+    };
+
+    // Extract idle animation
     if (idleGltf.animations && idleGltf.animations.length > 0) {
-      const idleClip = idleGltf.animations[0];
+      const idleClip = retargetClip(idleGltf.animations[0]);
       console.log('Idle animation clip:', idleClip.name);
       
       this.idleAction = this.mixer.clipAction(idleClip);
@@ -164,9 +206,9 @@ export class CharacterController {
       console.warn('No idle animation found in idle GLB file');
     }
 
-    // Extract walk animation (use first clip from walk file)
+    // Extract walk animation
     if (walkGltf.animations && walkGltf.animations.length > 0) {
-      const walkClip = walkGltf.animations[0];
+      const walkClip = retargetClip(walkGltf.animations[0]);
       console.log('Walk animation clip:', walkClip.name);
       
       this.walkAction = this.mixer.clipAction(walkClip);
@@ -228,69 +270,87 @@ export class CharacterController {
   }
 
   /**
-   * Update character position with smooth interpolation
+   * Map progress to Z position
    */
-  private updatePosition(delta: number): void {
-    // Smoothly interpolate current progress towards target progress
-    const progressDiff = this.targetProgress - this.currentProgress;
-    const maxStep = (this.smoothSpeed * delta) / Math.abs(this.endZ - this.startZ);
-    
-    if (Math.abs(progressDiff) > 0.0001) {
-      this.currentProgress += Math.sign(progressDiff) * Math.min(Math.abs(progressDiff), maxStep);
-      this.currentProgress = THREE.MathUtils.clamp(this.currentProgress, 0, 1);
-    }
-
-    // Calculate new Z position
-    const z = THREE.MathUtils.lerp(this.startZ, this.endZ, this.currentProgress);
-    
-    // Calculate movement speed for animation
-    this.currentSpeed = Math.abs(z - this.lastZ) / delta;
-    this.lastZ = z;
-    
-    // Update position
-    this.object3D.position.z = z;
+  private getZFromProgress(p: number): number {
+    const clamped = THREE.MathUtils.clamp(p, 0, 1);
+    return THREE.MathUtils.lerp(this.startZ, this.endZ, clamped);
   }
 
   /**
-   * Update animation based on movement speed
+   * Play idle animation with smooth transition
    */
-  private updateAnimation(): void {
-    // Use actual movement speed to determine animation
-    const isMoving = this.currentSpeed > this.idleThreshold;
-    
-    if (isMoving && this.walkAction && this.currentAction !== this.walkAction) {
-      this.fadeToAction(this.walkAction);
-    } else if (!isMoving && this.idleAction && this.currentAction !== this.idleAction) {
-      this.fadeToAction(this.idleAction);
+  private playIdle(): void {
+    if (!this.idleAction || this.currentAction === this.idleAction) return;
+
+    this.idleAction.enabled = true;
+    this.idleAction.reset();
+    this.idleAction.fadeIn(0.2);
+
+    if (this.currentAction) {
+      this.currentAction.fadeOut(0.2);
     }
+
+    this.idleAction.play();
+    this.currentAction = this.idleAction;
   }
 
   /**
-   * Smoothly transition between animations
+   * Play walk animation with smooth transition
    */
-  private fadeToAction(action: THREE.AnimationAction, duration: number = 0.3): void {
-    if (this.currentAction && this.currentAction !== action) {
-      this.currentAction.fadeOut(duration);
+  private playWalk(): void {
+    if (!this.walkAction || this.currentAction === this.walkAction) return;
+
+    this.walkAction.enabled = true;
+    this.walkAction.reset();
+    this.walkAction.fadeIn(0.2);
+
+    if (this.currentAction) {
+      this.currentAction.fadeOut(0.2);
     }
 
-    action.reset().fadeIn(duration).play();
-    this.currentAction = action;
+    this.walkAction.play();
+    this.currentAction = this.walkAction;
   }
 
   /**
    * Update animation mixer and character movement (call every frame)
    */
   public update(delta: number): void {
-    // Update position with smooth interpolation
-    this.updatePosition(delta);
-    
-    // Update animation based on current speed
-    this.updateAnimation();
-    
-    // Update animation mixer
-    if (this.mixer) {
-      this.mixer.update(delta);
+    if (!this.mixer) return;
+
+    // Smoothly move currentProgress toward targetProgress
+    const smoothSpeed = 5; // responsiveness, tweak if needed
+    const t = 1 - Math.exp(-smoothSpeed * delta);
+
+    this.currentProgress = THREE.MathUtils.lerp(
+      this.currentProgress,
+      this.targetProgress,
+      t
+    );
+
+    // Map progress to Z position
+    const newZ = this.getZFromProgress(this.currentProgress);
+    const deltaZ = newZ - this.lastZ;
+    this.object3D.position.z = newZ;
+
+    // Approximate speed along Z (units per second)
+    const speed = Math.abs(deltaZ) / Math.max(delta, 1e-5);
+    this.lastZ = newZ;
+
+    // Decide between idle vs walk based on speed
+    const WALK_THRESHOLD = 0.02; // tweak if character looks too "jittery"
+
+    if (this.idleAction && this.walkAction) {
+      if (speed > WALK_THRESHOLD) {
+        this.playWalk();
+      } else {
+        this.playIdle();
+      }
     }
+
+    // Advance animations
+    this.mixer.update(delta);
   }
 
   /**

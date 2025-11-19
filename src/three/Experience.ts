@@ -92,25 +92,35 @@ export class Experience {
     this.cameraController.onResize(window.innerWidth, window.innerHeight);
   }
 
-  /**
-   * Main animation loop
-   */
-  private update(): void {
+  // Main animation loop
+  private update = (): void => {
     if (!this.isRunning) return;
+    
+    requestAnimationFrame(this.update);
 
     const delta = this.clock.getDelta();
 
-    // Update character controller (animation mixer)
     this.characterController.update(delta);
+    this.updateCameraFollow();
 
-    // Update camera to follow character
-    this.cameraController.follow(this.characterController.getObject());
-
-    // Render the scene
     this.renderer.render(this.scene, this.cameraController.getCamera());
+  };
 
-    // Continue the loop
-    requestAnimationFrame(() => this.update());
+  /**
+   * Simple third-person camera follow helper
+   */
+  private updateCameraFollow(): void {
+    const target = this.characterController.object3D;
+
+    // Desired offset behind and above the character
+    const offset = new THREE.Vector3(0, 1.7, 4);
+    const desiredPos = target.position.clone().add(offset);
+
+    const followLerp = 0.1; // camera smoothing factor
+    this.cameraController.getCamera().position.lerp(desiredPos, followLerp);
+
+    const lookAtTarget = target.position.clone().add(new THREE.Vector3(0, 1.5, 0));
+    this.cameraController.getCamera().lookAt(lookAtTarget);
   }
 
   /**
