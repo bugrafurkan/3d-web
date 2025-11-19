@@ -116,5 +116,13 @@ export class UiController {
     this.overlay.classList.add('hidden');
     this.overlay.classList.remove('active');
   }
+
+  public setPanelVisible(visible: boolean): void {
+    if (visible) {
+      this.textPanel.style.display = '';
+    } else {
+      this.textPanel.style.display = 'none';
+    }
+  }
 }
 

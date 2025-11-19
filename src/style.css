@@ -121,3 +121,142 @@ body {
   transform: translateY(-1px);
 }
 
+/* Final choice overlay */
+#final-choice-overlay {
+  position: fixed;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+  pointer-events: none; /* enabled when active */
+}
+
+#final-choice-overlay.active {
+  display: flex;
+  pointer-events: auto;
+}
+
+#final-choice-box {
+  position: relative;
+  min-width: 320px;
+  max-width: 420px;
+  padding: 2rem 2.4rem;
+  border-radius: 16px;
+  background: radial-gradient(circle at top, #1f2937, #020617);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.65);
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  color: #e5e7eb;
+  text-align: center;
+  overflow: hidden;
+}
+
+#final-choice-title {
+  font-size: 1.4rem;
+  margin-bottom: 0.4rem;
+}
+
+#final-choice-subtitle {
+  font-size: 0.9rem;
+  opacity: 0.8;
+  margin-bottom: 1.2rem;
+}
+
+#final-choice-buttons {
+  position: relative;
+  margin-top: 0.8rem;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+}
+
+#final-choice-buttons button {
+  padding: 0.55rem 1.3rem;
+  border-radius: 999px;
+  border: none;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: transform 0.12s ease-out, box-shadow 0.12s ease-out, background 0.2s, opacity 0.2s;
+}
+
+#final-choice-positive {
+  background: linear-gradient(135deg, #22c55e, #4ade80);
+  color: #022c22;
+  box-shadow: 0 8px 25px rgba(34, 197, 94, 0.4);
+}
+
+#final-choice-positive:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 30px rgba(34, 197, 94, 0.55);
+}
+
+/* Negative (runaway) button: positioned absolutely in overlay (outside box) */
+#final-choice-negative {
+  position: fixed;
+  padding: 0.55rem 1.3rem;
+  border-radius: 999px;
+  border: none;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  background: linear-gradient(135deg, #ef4444, #f97373);
+  color: #fef2f2;
+  box-shadow: 0 8px 25px rgba(248, 113, 113, 0.4);
+  transition: transform 0.12s ease-out, box-shadow 0.12s ease-out, left 0.3s ease-out, top 0.3s ease-out;
+  z-index: 51;
+}
+
+#final-choice-negative:hover {
+  transform: translateY(-1px);
+}
+
+/* Celebration area */
+#final-celebration {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1.2rem;
+  opacity: 0;
+  transform: scale(0.9);
+  transition: opacity 0.4s ease-out, transform 0.4s ease-out;
+}
+
+#final-celebration.active {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.celebration-emoji {
+  font-size: 2.5rem;
+  animation: float-emoji 1.6s ease-in-out infinite alternate;
+}
+
+.celebration-emoji:nth-child(2) {
+  animation-delay: 0.2s;
+}
+.celebration-emoji:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes float-emoji {
+  from {
+    transform: translateY(6px) scale(1);
+  }
+  to {
+    transform: translateY(-10px) scale(1.08);
+  }
+}
+
+/* When celebration is active, dim the buttons */
+#final-choice-overlay.celebrate #final-choice-buttons button,
+#final-choice-overlay.celebrate #final-choice-negative {
+  opacity: 0.2;
+  pointer-events: none;
+}
+

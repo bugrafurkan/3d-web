@@ -4,8 +4,9 @@ import { CameraController } from './CameraController';
 import { CharacterController } from './CharacterController';
 import { ScrollController } from './ScrollController';
 import { UiController, UiSceneConfig } from './UiController';
+import { FinalChoiceController } from './FinalChoiceController';
 
-type SceneId = 'intro' | 'lifStreet' | 'yilSonu' | 'gidis';
+type SceneId = 'intro' | 'lifStreet' | 'yilSonu' | 'gidis' | 'final';
 
 interface SceneDefinition {
   id: SceneId;
@@ -64,7 +65,14 @@ const SCENES: SceneDefinition[] = [
         'Sessizlik ağırlaşıyor...',
         'Ama adımlar devam ediyor...'
       ],
-      nextSceneTitle: undefined
+      nextSceneTitle: 'Son Durak'
+    }
+  },
+  {
+    id: 'final',
+    ui: {
+      title: '',
+      texts: []
     }
   }
 ];
@@ -80,6 +88,7 @@ export class Experience {
   private characterController: CharacterController;
   private scrollController: ScrollController;
   private uiController: UiController;
+  private finalChoiceController: FinalChoiceController;
   
   private clock: THREE.Clock;
   private isRunning: boolean = false;
@@ -153,11 +162,21 @@ export class Experience {
       this.goToNextScene();
     });
 
+    // Initialize FinalChoiceController
+    this.finalChoiceController = new FinalChoiceController();
+
     // Set initial scene
     this.applyCurrentScene();
 
     // ScrollController: forward progress to both character and UI
     this.scrollController = new ScrollController((progress: number) => {
+      const sceneDef = SCENES[this.currentSceneIndex];
+
+      // In final scene, ignore scroll completely
+      if (sceneDef.id === 'final') {
+        return;
+      }
+
       this.sceneProgress = Math.min(1, Math.max(0, progress));
       this.characterController.setTargetProgress(this.sceneProgress);
       this.uiController.updateProgress(this.sceneProgress);
@@ -698,8 +717,9 @@ export class Experience {
         this.setupGidisEnvironment();
         break;
       case 'intro':
+      case 'final':
       default:
-        // No special environment for intro at this step
+        // No special environment for intro or final
         break;
     }
   }
@@ -751,9 +771,27 @@ export class Experience {
     // Immediately reset character position to the start of the path
     this.characterController.setTargetProgress(0);
 
-    // Update UI
-    this.uiController.setScene(ui);
-    this.uiController.updateProgress(0);
+    // Handle UI + final overlay
+    const isFinal = sceneDef.id === 'final';
+
+    if (isFinal) {
+      // Hide panel texts; final screen uses its own overlay
+      this.uiController.setScene(ui);
+      this.uiController.setPanelVisible(false);
+
+      // Hide character in final scene
+      this.characterController.object3D.visible = false;
+
+      // Show final choice overlay
+      this.finalChoiceController.show();
+    } else {
+      // Normal scenes: show right panel, hide final overlay
+      this.finalChoiceController.hide();
+      this.characterController.object3D.visible = true;
+      this.uiController.setScene(ui);
+      this.uiController.setPanelVisible(true);
+      this.uiController.updateProgress(0);
+    }
 
     // After basic setup, initialize environment for the new scene
     this.setupSceneEnvironment(this.currentSceneIndex);

@@ -23,6 +23,30 @@
       </div>
     </div>
 
+    <!-- Final choice overlay (last scene) -->
+    <div id="final-choice-overlay" class="hidden">
+      <!-- Negative button outside the box (can't escape box bounds) -->
+      <button id="final-choice-negative">Berbattı, hiç beğenmedim 💣</button>
+
+      <div id="final-choice-box">
+        <h2 id="final-choice-title">Son bir seçim kaldı</h2>
+        <p id="final-choice-subtitle">Bu hikâyeyi nasıl hatırlamak istersin?</p>
+
+        <div id="final-choice-buttons">
+          <button id="final-choice-positive">Güzel bir yıl oldu 🌟</button>
+        </div>
+
+        <div id="final-celebration" class="hidden">
+          <div class="celebration-emoji">🎉</div>
+          <div class="celebration-emoji">🎆</div>
+          <div class="celebration-emoji">🌸</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Background music for final scene -->
+    <audio id="final-music" src="/audio/final.mp3" loop></audio>
+
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
